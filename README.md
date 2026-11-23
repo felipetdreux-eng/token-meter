@@ -25,3 +25,13 @@ claude plugin install token-meter --marketplace felipetdreux-eng/token-meter
 ```
 
 No app desktop, onde `/plugin` não roda: clique em + ao lado da caixa de mensagem, depois Plugins, Add marketplace com `felipetdreux-eng/token-meter`, e Add plugin.
+
+## Extensão para o claude.ai (navegador)
+
+A pasta `web-extension/` é uma extensão do Chrome/Edge com um painel lateral que fica ao lado do claude.ai: limites de 5 horas e da semana, contexto estimado da conversa e o selo ✓/✗ de modelo.
+
+1. Baixe `token-meter-web.zip` (ou este repositório) e descompacte.
+2. Abra `chrome://extensions`, ligue o **Modo do desenvolvedor** e clique em **Carregar sem compactação**, escolhendo a pasta `web-extension`.
+3. Fixe o ícone na barra e clique nele com o claude.ai aberto: o painel abre do lado.
+
+Os limites vêm de endereços internos do claude.ai, que podem mudar sem aviso. Tokens e contexto são estimativas pelo texto da conversa.
