@@ -1,5 +1,0 @@
-{
-  "name": "token-meter",
-  "owner": { "name": "felipetdreux-eng" },
-  "plugins": [{ "name": "token-meter", "source": "./" }]
-}
