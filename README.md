@@ -1,10 +1,12 @@
 # token-meter
 
-Um favorito (bookmarklet) para o claude.ai que abre um painel flutuante com:
+Um favorito (bookmarklet) para o claude.ai que abre um painel flutuante com três abas:
 
 - **Selo de modelo**: ✓ verde quando o modelo combina com a sua última mensagem; ✗ vermelho com o modelo sugerido quando não combina (classificação por palavras-chave).
 - **Anéis** de contexto da conversa, limite de 5 horas e limite da semana, com o tempo até resetar.
 - **Avisos** quando o contexto ou um limite passa de 60% / 80–85%.
+- **Agentes**: suas sessões do Claude Code (trabalhando, esperando você, falharam) e tarefas agendadas (próxima execução, se a última deu certo).
+- **Cérebro**: resumo de uma pasta de notas .md (Obsidian ou parecido) que você escolhe: notas, tarefas abertas, o que mexeu por último, áreas e tags. Nada sai do seu computador.
 
 Não instala nada: funciona mesmo quando extensões estão bloqueadas.
 
@@ -21,4 +23,4 @@ Os limites vêm de endereços internos do claude.ai, que podem mudar sem aviso. 
 
 ## Código
 
-`bookmarklet/lib.js` (leitura dos dados e selo) + `bookmarklet/overlay.js` (painel). `bookmarklet/build.sh` gera o favorito.
+`bookmarklet/lib.js` (uso e selo), `agents.js`, `brain.js` e `overlay.js` (painel). `bookmarklet/build.sh` gera o favorito.
