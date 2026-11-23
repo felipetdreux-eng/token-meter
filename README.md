@@ -35,3 +35,7 @@ A pasta `web-extension/` é uma extensão do Chrome/Edge com um painel lateral q
 3. Fixe o ícone na barra e clique nele com o claude.ai aberto: o painel abre do lado.
 
 Os limites vêm de endereços internos do claude.ai, que podem mudar sem aviso. Tokens e contexto são estimativas pelo texto da conversa.
+
+## Favorito para o claude.ai (sem instalar nada)
+
+Para quando não dá para instalar extensões (por exemplo, conta com Family Link): abra `bookmarklet/instalar-token-meter.html` no Chrome e arraste o botão para a barra de favoritos. No claude.ai, clique no favorito para abrir o painel; clique de novo para fechar. O código-fonte é `bookmarklet/overlay.js` + `web-extension/lib.js`.
