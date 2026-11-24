@@ -1,4 +1,4 @@
-// Testes das funções puras de lib.js. Rodar: node --test bookmarklet/tests/
+// Testes das funções puras de lib.js. Rodar: node --test 'bookmarklet/tests/*.test.js'
 const test = require('node:test')
 const assert = require('node:assert')
 require('../lib.js')

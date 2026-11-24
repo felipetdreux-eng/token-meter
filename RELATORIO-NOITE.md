@@ -40,3 +40,16 @@ claude plugin validate economia
 bash bookmarklet/build.sh && git status     # build: não deve deixar diferença
 git log --oneline main..HEAD
 ```
+
+## Revisão (code-review medium + security-review do diff contra `main`)
+- Nenhuma das 5 correções foi revertida. As duas revisões confirmaram que os bugs são reais e que nenhuma correção causa regressão. Os 9 testes do favorito passam, e o build continua reproduzível.
+- Segurança: nenhuma vulnerabilidade nova. A `RegExp` nova é montada só de uma lista fixa, e os textos exibidos continuam passando por `esc()`.
+- Efeito colateral aceito de `e7a45ce`: "okay", "oks" e "okk" deixaram de contar como pedido simples. É um detalhe da heurística, e você decide se quer de volta.
+- Bugs antigos, achados na revisão e não corrigidos:
+  - "debug" conta também como "bug" e pesa em dobro.
+  - "compar" casa com "compartilha", e "lista" casa com "especialista".
+  - "só" no fim da mensagem não conta, porque a palavra-chave é "só " com espaço.
+  - `claude-3-5-sonnet-20241022` aparece como "Sonnet 20241022".
+  - Quando falta menos de 30 s para o reset, aparece "reseta em 0h00".
+  - Fundo quase transparente (por exemplo alfa 0,05) ainda conta como cor sólida.
+- O comentário no topo de `lib.test.js` mandava rodar `node --test bookmarklet/tests/`, que falha no Node 22. Corrigi para usar o glob.
