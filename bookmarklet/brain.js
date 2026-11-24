@@ -62,12 +62,13 @@
 
   async function scan(dir) {
     const files = []
+    let truncated = false
     for await (const f of walk(dir)) {
-      if (files.length >= MAX_FILES) break
+      if (files.length >= MAX_FILES) { truncated = true; break }
       const file = await f.h.getFile()
       files.push({ name: f.name, path: f.path, mtime: file.lastModified, text: await file.text() })
     }
-    return { ...summarize(files), vault: dir.name, scannedAt: Date.now(), truncated: files.length >= MAX_FILES }
+    return { ...summarize(files), vault: dir.name, scannedAt: Date.now(), truncated }
   }
 
   async function pick() {
