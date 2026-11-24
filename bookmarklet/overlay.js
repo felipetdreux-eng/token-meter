@@ -105,7 +105,7 @@
   const resetText = iso => {
     const ms = new Date(iso).getTime() - Date.now()
     if (!iso || !isFinite(ms) || ms <= 0) return ''
-    const h = Math.floor(ms / 3.6e6), m = Math.round((ms % 3.6e6) / 6e4)
+    const mins = Math.round(ms / 6e4), h = Math.floor(mins / 60), m = mins % 60
     return h >= 24 ? `reseta em ${Math.floor(h / 24)}d ${h % 24}h` : `reseta em ${h}h${String(m).padStart(2, '0')}`
   }
 
