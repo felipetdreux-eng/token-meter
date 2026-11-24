@@ -75,7 +75,10 @@
       }
       if (m.sender === 'human') lastHuman = text
     }
-    return { tokens: Math.round(chars / CHARS_PER_TOKEN) + fileTokens, messages: msgs.length, lastHuman, model: conv?.model ?? null }
+    // O modelo pode vir em lugares diferentes, conforme a versão do claude.ai.
+    const lastAssistant = [...msgs].reverse().find(m => m.sender === 'assistant')
+    const model = conv?.model || conv?.settings?.model || lastAssistant?.model || null
+    return { tokens: Math.round(chars / CHARS_PER_TOKEN) + fileTokens, messages: msgs.length, lastHuman, model }
   }
 
   // Janela de contexto do claude.ai por modelo (aproximada).
@@ -88,9 +91,14 @@
   }
 
   function prettyModel(model) {
-    const m = /(haiku|sonnet|opus|fable|mythos)-(\d+)(?:-(\d+))?/i.exec(model || '')
-    if (!m) return model || 'modelo padrão'
-    return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? '.' + m[3] : ''}`
+    const s = String(model || '')
+    const id = /(haiku|sonnet|opus|fable|mythos)-(\d+)(?:-(\d+))?/i.exec(s)
+    const cap = w => w[0].toUpperCase() + w.slice(1).toLowerCase()
+    if (id) return `${cap(id[1])} ${id[2]}${id[3] ? '.' + id[3] : ''}`
+    // Nome de tela, como "Claude Opus 5.5" no botão de modelo
+    const shown = /(haiku|sonnet|opus|fable|mythos)\s*(\d+(?:\.\d+)?)?/i.exec(s)
+    if (shown) return `${cap(shown[1])}${shown[2] ? ' ' + shown[2] : ''}`
+    return s || 'modelo desconhecido'
   }
 
   const COMPLEX = ['refator', 'arquitet', 'debug', 'bug', 'não funciona', 'nao funciona', 'quebrou', 'por que', 'investig', 'migr', 'implement', 'otimiz', 'performance', 'seguran', 'planej', 'plano', 'integra', 'deploy', 'banco de dados', 'estratégia', 'estrategia', 'analis', 'compar', 'contrato', 'do zero', 'sistema', 'design', 'refactor', 'architecture']
@@ -119,7 +127,7 @@
     const t = tier(model)
     const current = prettyModel(model)
     const ok = { isOk: true, kind, current, recommend: current, why: `Certo para tarefa ${kind}.` }
-    if (t < 0) return { ...ok, why: 'Modelo não identificado.' }
+    if (t < 0) return { ...ok, isOk: null, why: 'Não consegui ler qual modelo esta conversa usa.' }
     if (kind === 'simples' && t >= 2) return { isOk: false, kind, current, recommend: 'Sonnet 5.5', why: `Tarefa simples no ${current}: gasta mais do seu limite sem ganho.` }
     if (kind === 'normal' && t === 0) return { isOk: false, kind, current, recommend: 'Sonnet 5.5', why: 'O Haiku pode não dar conta desta tarefa.' }
     if (kind === 'normal' && t === 3) return { isOk: false, kind, current, recommend: 'Opus 5.5', why: 'Fable para tarefa comum: consome muito limite sem ganho claro.' }

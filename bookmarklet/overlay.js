@@ -133,7 +133,9 @@
     else if (ctx && ctx.p >= 60) alert = `<div class="alert warn">Contexto em ~${Math.round(ctx.p)}%</div>`
     else if (worst && worst.p >= 60) alert = `<div class="alert warn">Limite de ${esc(worst.label)} em ${Math.round(worst.p)}%</div>`
     const b = conv?.badge
-    const badge = b
+    const badge = b && b.isOk === null
+      ? `<div class="card badge"><span class="mark muted">?</span><span class="muted">${esc(b.why)} Escolha o modelo no seletor da conversa e mande outra mensagem.</span></div>`
+      : b
       ? b.isOk
         ? `<div class="card badge ok"><span class="mark">✓</span><strong>${esc(b.current)}</strong><span class="muted">certo para tarefa ${esc(b.kind)}</span></div>`
         : `<div class="card badge bad"><span class="mark">✗</span><span class="muted">${esc(b.current)} →</span><strong>${esc(b.recommend)}</strong><span class="why">${esc(b.why)} Troque no seletor de modelo.</span></div>`
@@ -197,13 +199,21 @@
   // ---------- Agentes ----------
   function viewAgentes() {
     if (!agents) return '<p class="muted">Procurando seus agentes…</p>'
-    const { sessions, triggers, tried } = agents
-    if (!sessions && !triggers) {
-      return `<div class="alert warn">Não consegui ler seus agentes a partir do claude.ai.</div>
-        <div class="card"><div class="title">O que o claude.ai respondeu</div><div class="tried">${esc(tried.join('\n'))}</div></div>
-        <p class="muted">Mande um print deste quadro para o Claude ajustar. Enquanto isso, veja tudo em <a href="/code" target="_blank">claude.ai/code</a>.</p>`
-    }
+    const { chats, sessions, triggers } = agents
     let html = ''
+    if (chats) {
+      const live = chats.filter(c => c.live)
+      const recent = chats.filter(c => !c.live && c.recent)
+      html += `<div class="card"><div class="title">Chats trabalhando agora · ${live.length}</div>${live.length
+        ? live.map(c => `<div class="row"><span class="dot working"></span><div class="grow"><a class="ttl" href="/chat/${esc(c.id)}">${esc(c.name)}</a><div class="meta">respondendo${c.model ? ' · ' + esc(TM.prettyModel(c.model)) : ''}</div></div></div>`).join('')
+        : '<p class="muted" style="margin:0">Nenhum chat respondendo agora.</p>'}
+        ${recent.length ? `<div class="title" style="margin-top:8px">Mexidos nos últimos 15 min</div>${recent.slice(0, 6).map(c => `<div class="row"><span class="dot okrun"></span><div class="grow"><a class="ttl" href="/chat/${esc(c.id)}">${esc(c.name)}</a><div class="meta">${esc(ago(c.updatedAt))}</div></div></div>`).join('')}` : ''}</div>`
+    } else {
+      html += '<div class="alert warn">Não consegui ler a lista de chats do claude.ai.</div>'
+    }
+    if (!sessions && !triggers) {
+      return html + '<p class="meta">Sessões do Claude Code: não dá para ler daqui. Veja em <a href="/code" target="_blank">claude.ai/code</a>.</p>'
+    }
     if (sessions) {
       const count = k => sessions.filter(s => s.state.key === k).length
       html += `<div class="chips"><span class="chip"><b>${count('working')}</b> trabalhando</span><span class="chip"><b>${count('blocked')}</b> esperando você</span><span class="chip"><b>${count('failed')}</b> falharam</span><span class="chip"><b>${triggers ? triggers.filter(t => t.enabled).length : '—'}</b> agendadas</span></div>`
@@ -268,6 +278,20 @@
     $('#upd').textContent = t ? `atualizado ${ago(t)}` : ''
   }
 
+  // Plano B: o nome do modelo escrito no botão de modelo da página.
+  function modelFromPage() {
+    const sel = ['[data-testid="model-selector-dropdown"]', 'button[data-testid*="model"]', 'button[aria-label*="model" i]', 'button[aria-haspopup="menu"]']
+    for (const q of sel) {
+      for (const el of document.querySelectorAll(q)) {
+        const t = (el.innerText || el.getAttribute('aria-label') || '').trim()
+        if (/haiku|sonnet|opus|fable|mythos/i.test(t)) return t
+      }
+    }
+    return null
+  }
+  // Este chat está gerando resposta agora? (botão de parar visível)
+  const isStreamingHere = () => !!document.querySelector('button[aria-label*="Stop" i], button[aria-label*="Parar" i], [data-testid="stop-button"]')
+
   async function getJson(path) {
     const r = await fetch(path, { credentials: 'include', headers: { accept: 'application/json' } })
     if (!r.ok) throw new Error(`${path.split('?')[0].replace(/[0-9a-f-]{36}/g, '…')} respondeu ${r.status}`)
@@ -292,6 +316,7 @@
       if (id) {
         const conv = await getJson(`/api/organizations/${orgId}/chat_conversations/${id}?tree=False&rendering_mode=messages&render_all_tools=true`)
         const est = TM.estimateConversation(conv)
+        if (!est.model) est.model = modelFromPage()
         next.conversation = { tokens: est.tokens, messages: est.messages, model: est.model, window: TM.contextWindow(est.model), badge: est.lastHuman ? TM.advise(TM.classify(est.lastHuman), est.model) : null,
           lastHuman: est.lastHuman, skillsUsed: Object.fromEntries(TMSkills.usedIn(conv)) }
       }
@@ -305,11 +330,22 @@
     agentsBusy = true
     try {
       orgId = orgId ?? (await getOrgId())
+      let chats = null
+      try {
+        const list = await getJson(`/api/organizations/${orgId}/chat_conversations?limit=30`)
+        const arr = Array.isArray(list) ? list : Array.isArray(list?.data) ? list.data : []
+        const here = TM.conversationIdFromUrl(location.pathname)
+        chats = arr.map(c => {
+          const age = (Date.now() - new Date(c.updated_at || c.created_at).getTime()) / 1000
+          const live = (c.uuid === here && isStreamingHere()) || age < 120
+          return { id: c.uuid, name: c.name || 'Chat sem título', model: c.model || null, updatedAt: c.updated_at || c.created_at, live, recent: age < 900 }
+        })
+      } catch {}
       const s = await TMAgents.tryPaths(TMAgents.SESSION_PATHS, orgId)
       const t = await TMAgents.tryPaths(TMAgents.TRIGGER_PATHS, orgId)
-      agents = { updatedAt: Date.now(), sessions: s.json ? TMAgents.parseSessions(s.json) : null, triggers: t.json ? TMAgents.parseTriggers(t.json) : null, tried: [...s.tried, ...t.tried] }
+      agents = { updatedAt: Date.now(), chats, sessions: s.json ? TMAgents.parseSessions(s.json) : null, triggers: t.json ? TMAgents.parseTriggers(t.json) : null, tried: [...s.tried, ...t.tried] }
     } catch (e) {
-      agents = { updatedAt: Date.now(), sessions: null, triggers: null, tried: [e.message] }
+      agents = { updatedAt: Date.now(), chats: null, sessions: null, triggers: null, tried: [e.message] }
     }
     agentsBusy = false
     if (tab === 'agentes') render()
