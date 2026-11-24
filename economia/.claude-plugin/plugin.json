@@ -1,1 +1,1 @@
-{ "name": "economia", "version": "0.1.0", "description": "Desvia tarefas mecânicas da conversa para subagentes em modelos mais baratos (Haiku e Sonnet)", "types": "./types/index.d.ts" }
+{ "name": "economia", "version": "0.2.0", "description": "Desvia tarefas mecânicas para subagentes baratos (Haiku e Sonnet) e mostra suas skills em blocos, com sugestões", "types": "./types/index.d.ts" }

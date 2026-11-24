@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
-import type { Stats } from '../types'
+import type { SkillUse, Stats } from '../types'
+import { BLOCKS, lookup, suggest } from './catalog'
 
 // Como o desvio funciona:
 // 1. Registra dois subagentes baratos: "leitor" (Haiku) e "executor" (Sonnet).
@@ -13,6 +14,14 @@ import type { Stats } from '../types'
 const EMPTY: Stats = { delegated: 0, rerouted: 0, cheapTokens: {}, mainModel: '' }
 const stats = atom({ plugin: 'economia', key: 'stats' } as const, EMPTY, { shape: 'stats-1' })
 const isOn = atom({ plugin: 'economia', key: 'isOn' } as const, true)
+
+const skillUse = atom({ plugin: 'economia', key: 'skillUse' } as const, {} as Record<string, SkillUse>, { shape: 'skilluse-1' })
+const lastPrompt = atom({ plugin: 'economia', key: 'lastPrompt' } as const, '')
+const isUsedOnly = atom({ plugin: 'economia', key: 'isUsedOnly' } as const, false)
+const openBlocks = atom({ plugin: 'economia', key: 'openBlocks' } as const, ['economia'] as string[], { shape: 'open-1' })
+
+const PANE = 'economia-skills'
+const PANE_TITLE = 'Skills'
 
 const LEITOR = 'economia:leitor'
 const EXECUTOR = 'economia:executor'
@@ -51,7 +60,8 @@ Ao terminar, relate em poucas linhas: o que mudou (arquivos), comandos rodados e
 // Pedidos de agente que são leitura/pesquisa: vão para o Haiku quando ninguém escolheu modelo.
 const READ_ONLY = /\b(procur|busc|achar|ache|encontr|list|ler|leia|lê|resum|pesquis|search|find|look|locat|grep|read|summar|explor|investig)/i
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  registerSkills(on, options)
   on('session.start', async ($, e, next) => {
     await $.agent.register({
       name: 'leitor',
@@ -70,6 +80,8 @@ export const register: Register = on => {
       disallowedTools: ['Agent'],
     })
     await $.command.register({ name: 'economia', description: 'Mostra o que foi desviado para modelos baratos; /economia on ou off liga e desliga' })
+    await $.command.register({ name: 'minhas-skills', description: 'Abre o painel das suas skills, em blocos, com sugestões' })
+    void $.ui.open({ id: PANE, title: PANE_TITLE })
     return next(e)
   })
 
@@ -132,5 +144,110 @@ export const register: Register = on => {
         'Use /economia off para desligar e /economia on para ligar.',
       ].join('\n'),
     }
+  })
+}
+
+// ---------- Painel de skills ----------
+async function markUsed($: EngineInterface, name: string): Promise<void> {
+  const now = await $.clock.now()
+  await update($, skillUse, m => ({ ...m, [name]: { count: (m[name]?.count ?? 0) + 1, last: now } }))
+}
+
+export const registerSkills: Register = on => {
+  // Toda vez que uma skill é expandida (/nome, ferramenta Skill ou pré-carga), ela fica verde.
+  on('skill.prompt', async ($, e, next) => {
+    await markUsed($, e.skill)
+    return next(e)
+  })
+
+  // Guarda a última mensagem digitada para sugerir skills.
+  on('prompt.submit', async ($, e, next) => {
+    if (!e.command && !e.isMeta && e.text.trim()) await update($, lastPrompt, () => e.text.slice(0, 2000))
+    return next(e)
+  })
+
+  on('command.run', { command: 'minhas-skills' }, async $ => {
+    await $.ui.open({ id: PANE, title: PANE_TITLE })
+    return { text: 'Painel de skills aberto.' }
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Text, Button } = $.ui.resolve(e)
+    const commands = await $.command.list()
+    const used = await read($, skillUse)
+    const usedOnly = await read($, isUsedOnly)
+    const open = await read($, openBlocks)
+    const prompt = await read($, lastPrompt)
+
+    // Só o que existe nesta sessão: as do catálogo, mais as de plugins e do usuário que o catálogo não conhece.
+    const skills = commands
+      .filter(c => c.name !== 'minhas-skills' && (lookup(c.name) !== undefined || c.source === 'plugin' || c.source === 'user'))
+      .map(c => ({ name: c.name, entry: lookup(c.name), official: c.description }))
+    const isUsed = (name: string): boolean => used[name] !== undefined || used[name.split(':').pop() ?? name] !== undefined
+    const usedCount = skills.filter(s => isUsed(s.name)).length
+    const tips = suggest(prompt, skills.map(s => s.name))
+
+    const useSkill = async (name: string): Promise<void> => {
+      const r = await $.prompt.fill({ text: `/${name} `, mode: 'replace' })
+      $.ui.toast(r.isFilled ? `Coloquei /${name} na caixa: escreva o pedido depois e envie.` : `Digite /${name} na caixa de mensagem e envie.`)
+    }
+    const row = (s: { name: string; entry: ReturnType<typeof lookup>; official: string }, why?: string) => (
+      <Box flexDirection="row" gap={1} alignItems="flex-start">
+        <Text color={isUsed(s.name) ? 'success' : 'inactive'}>●</Text>
+        <Box flexDirection="column" flexGrow={1} flexShrink={1}>
+          <Text bold>/{s.name}</Text>
+          <Text size="caption" color="subtle">{s.entry?.what ?? s.official}</Text>
+          {why && <Text size="caption" color="claude">combina com: {why}</Text>}
+          {isUsed(s.name) && <Text size="caption" color="success">usada {used[s.name]?.count ?? used[s.name.split(':').pop() ?? '']?.count ?? 1}x nesta sessão</Text>}
+        </Box>
+        <Button key={`use:${why ? 'tip:' : ''}${s.name}`} label="Usar" onPress={() => useSkill(s.name)} />
+      </Box>
+    )
+
+    const visible = usedOnly ? skills.filter(s => isUsed(s.name)) : skills
+    const byBlock = BLOCKS.map(b => ({ ...b, items: visible.filter(s => (s.entry?.block ?? 'outras') === b.id) })).filter(b => b.items.length > 0)
+
+    return (
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="row" justifyContent="space-between" alignItems="center">
+          <Text weight="semibold" color="claude">SKILLS</Text>
+          <Text size="caption" color="subtle">{skills.length} instaladas · {usedCount} usadas</Text>
+        </Box>
+        <Box flexDirection="row" gap={1}>
+          <Button key="filter:all" label={usedOnly ? '○ Todas' : '● Todas'} onPress={() => update($, isUsedOnly, () => false)} />
+          <Button key="filter:used" label={usedOnly ? `● Em uso (${usedCount})` : `○ Em uso (${usedCount})`} onPress={() => update($, isUsedOnly, () => true)} />
+        </Box>
+
+        <Box flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1} gap={1}>
+          <Text size="footnote" weight="semibold" color="claude">SUGESTÕES PARA SUA ÚLTIMA MENSAGEM</Text>
+          {tips.length > 0 ? (
+            tips.map(t => {
+              const s = skills.find(x => x.name === t.name)
+              return s ? row(s, t.hits.join(', ')) : null
+            })
+          ) : (
+            <Text size="caption" color="subtle">{prompt ? 'Nenhuma skill combina com a última mensagem.' : 'Mande uma mensagem e aqui aparecem as skills que combinam com ela.'}</Text>
+          )}
+        </Box>
+
+        {usedOnly && usedCount === 0 && <Text color="subtle">Nenhuma skill usada nesta sessão ainda.</Text>}
+
+        {byBlock.map(b => {
+          const isOpen = usedOnly || open.includes(b.id)
+          const usedHere = b.items.filter(s => isUsed(s.name)).length
+          return (
+            <Box flexDirection="column" gap={1}>
+              <Button
+                key={`block:${b.id}`}
+                label={`${isOpen ? '▾' : '▸'} ${b.title} (${b.items.length})${usedHere ? ` · ${usedHere} em uso` : ''}`}
+                onPress={() => update($, openBlocks, list => (list.includes(b.id) ? list.filter(x => x !== b.id) : [...list, b.id]))}
+              />
+              {isOpen && <Box flexDirection="column" gap={1} paddingLeft={2}>{b.items.map(s => row(s))}</Box>}
+            </Box>
+          )
+        })}
+        <Text size="caption" color="subtle">● verde = usada nesta sessão. "Usar" coloca o comando na caixa de mensagem; você completa e envia.</Text>
+      </Box>
+    )
   })
 }

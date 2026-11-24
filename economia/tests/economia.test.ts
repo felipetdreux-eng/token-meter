@@ -6,6 +6,7 @@ test('registra os subagentes baratos', async ($, on) => {
   const specs: { name: string; model?: string }[] = []
   on('agent.register', (_, e) => (specs.push(e), { value: { agent: `economia:${e.name}` } }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(specs.map(s => `${s.name}:${s.model}`)).toEqual(['leitor:haiku', 'executor:sonnet'])

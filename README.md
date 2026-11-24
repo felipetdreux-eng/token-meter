@@ -29,6 +29,8 @@ Os limites vêm de endereços internos do claude.ai, que podem mudar sem aviso. 
 
 A pasta `economia/` é um mod do Claude Code que desvia trabalho mecânico (pesquisa, leitura, edições já decididas, rodar testes) para subagentes baratos: `economia:leitor` (Haiku) e `economia:executor` (Sonnet). O modelo da conversa fica com as decisões. `/economia` mostra o que foi desviado; `/economia off` e `/economia on` desligam e ligam.
 
+Também abre o painel **Skills** (ou `/minhas-skills`): suas skills em blocos (economia de tokens, agentes, Instagram, marketing, documentos, código, design...), cada uma com para que serve, ponto verde nas usadas na sessão, filtro "Em uso", botão "Usar" (coloca o comando na caixa de mensagem) e sugestões para a sua última mensagem.
+
 ```
 /plugin install economia --marketplace felipetdreux-eng/token-meter
 ```

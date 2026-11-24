@@ -9,11 +9,21 @@ export type Stats = {
   mainModel: string
 }
 
+export type SkillUse = { count: number; last: number }
+
 declare module 'claude-code' {
   interface PluginState {
     economia: {
       stats: Shaped<Stats>
       isOn: boolean
+      /** Skills usadas nesta sessão (nome → vezes e quando). */
+      skillUse: Shaped<Record<string, SkillUse>>
+      /** Última mensagem do usuário, para sugerir skills. */
+      lastPrompt: string
+      /** Botão "Em uso": mostra só as skills já usadas. */
+      isUsedOnly: boolean
+      /** Blocos abertos no painel. */
+      openBlocks: Shaped<string[]>
     }
   }
 }
