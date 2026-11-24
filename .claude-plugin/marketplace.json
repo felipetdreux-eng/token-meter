@@ -1,6 +1,19 @@
 {
   "name": "felipe-mods",
-  "owner": { "name": "felipetdreux-eng" },
+  "owner": {
+    "name": "felipetdreux-eng"
+  },
   "description": "Mods do Claude Code do Felipe",
-  "plugins": [{ "name": "economia", "source": "./economia", "description": "Desvia tarefas mecânicas para subagentes em modelos mais baratos" }]
+  "plugins": [
+    {
+      "name": "economia",
+      "source": "./economia",
+      "description": "Desvia tarefas mecânicas para subagentes em modelos mais baratos"
+    },
+    {
+      "name": "token-meter",
+      "source": "./token-meter",
+      "description": "Painel de uso de tokens: contexto, limites de 5 horas e da semana, custo, selo de modelo certo/errado e widget na barra lateral do app desktop"
+    }
+  ]
 }

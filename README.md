@@ -41,3 +41,15 @@ Num shell:
 ```bash
 claude plugin install economia --marketplace felipetdreux-eng/token-meter
 ```
+
+## Mod "token-meter" para o Claude Code (app desktop)
+
+A pasta `token-meter/` é um mod com o painel "Tokens & Modelos": anéis de contexto e dos limites de 5 horas e da semana, custo estimado, tokens gerados, acerto do cache, selo ✓/✗ de modelo e esforço para a tarefa, guia dos modelos e um widget na barra lateral do app desktop. Comandos: `/tokens` e `/guia-modelos`.
+
+No app desktop: clique no **+** ao lado da caixa de mensagem, depois **Plugins**, **Add marketplace** com `felipetdreux-eng/token-meter`, e **Add plugin** no "token-meter".
+
+No terminal:
+
+```bash
+claude plugin install token-meter --marketplace felipetdreux-eng/token-meter
+```
