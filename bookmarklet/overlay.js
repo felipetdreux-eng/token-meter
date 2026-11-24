@@ -24,6 +24,12 @@
     font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   .wrap.dark { --bg:#262624; --card:#30302e; --text:#faf9f5; --muted:#a6a39a; --line:#3d3d3a; --track:#d977572e; --ok:#5bbf7f; --warn:#ffc107; --err:#ff6b80; --info:#7aa7e8; box-shadow: 0 8px 30px #0006; }
   .wrap.min { width: auto; }
+  .wrap.popped { position: static; width: auto; max-height: none; height: 100vh; border-radius: 0; border: none; box-shadow: none; }
+  .act { margin: 0 12px 8px; border-radius: 10px; padding: 8px 10px; border: 1px solid var(--warn); display:flex; flex-direction:column; gap:6px; }
+  .act .msg { font-size: 12px; font-weight: 600; color: var(--warn); }
+  .act .btns { display:flex; gap:6px; }
+  .act button { flex: 1; height: 30px; }
+  .act.calm { border-color: var(--line); padding: 6px 10px; }
   .wrap.min main, .wrap.min footer, .wrap.min nav { display: none; }
   header { display:flex; align-items:center; gap:6px; padding:10px 12px 6px; }
   .brand { font-size:11px; font-weight:600; letter-spacing:.08em; color:var(--accent); flex:1; }
@@ -76,7 +82,8 @@
   </style>
   <div class="wrap">
     <header><span class="brand">TOKEN METER</span><span class="pill" id="pill"></span>
-      <button id="r" title="Atualizar">↻</button><button id="m" title="Minimizar">–</button><button id="x" title="Fechar">×</button></header>
+      <button id="pop" title="Abrir em janela própria (fica visível em outras abas)">⧉</button><button id="r" title="Atualizar">↻</button><button id="m" title="Minimizar">–</button><button id="x" title="Fechar">×</button></header>
+    <div id="act"></div>
     <nav><button data-tab="uso">Uso</button><button data-tab="skills">Skills</button><button data-tab="agentes">Agentes</button><button data-tab="cerebro">Cérebro</button></nav>
     <main id="app"><p class="muted">Carregando…</p></main>
     <footer><span id="upd" class="muted"></span><a id="flink" href="/settings/usage">Settings › Usage</a></footer>
@@ -147,7 +154,13 @@
   }
 
   // ---------- Skills ----------
-  let usedOnly = false, skillNote = ''
+  let usedOnly = false, skillNote = '', showDiag = false
+  const diagText = conv => {
+    const d = conv?.diag
+    if (!d) return 'Nenhuma conversa aberta.'
+    return [`mensagens: ${d.messages}`, `ferramentas: ${d.tools.length ? d.tools.map(([n, c]) => `${n} x${c}`).join(', ') : 'nenhuma'}`,
+      `caminhos de skills: ${d.paths.length ? '\n  ' + d.paths.join('\n  ') : 'nenhum'}`, `detectadas: ${Object.keys(conv.skillsUsed || {}).join(', ') || 'nenhuma'}`].join('\n')
+  }
   let openBlocks = (() => { try { return JSON.parse(localStorage.getItem('tm-open') || '["conteudo"]') } catch { return ['conteudo'] } })()
   function viewSkills() {
     const conv = usage?.conversation
@@ -179,7 +192,9 @@
         return `<div><button class="blk" data-block="${b.id}">${isOpen ? '▾' : '▸'} ${esc(b.title)} (${b.items.length})${u ? ` · <span class="green">${u} em uso</span>` : ''}</button>
           ${isOpen ? `<div class="card" style="margin-top:6px">${b.items.map(n => row(n)).join('')}</div>` : ''}</div>`
       }).join('')}
-      <p class="meta">Verde = o Claude usou nesta conversa. "Usar" escreve o pedido na caixa de mensagem; você completa e envia.</p>`
+      <p class="meta">Verde = o Claude usou nesta conversa. "Usar" escreve o pedido na caixa de mensagem; você completa e envia.</p>
+      <button data-diag style="width:100%">${showDiag ? 'Esconder diagnóstico' : 'Diagnóstico (se o verde não aparecer)'}</button>
+      ${showDiag ? `<div class="card"><div class="title">O que esta conversa tem</div><div class="tried">${esc(diagText(conv))}</div><p class="meta" style="margin:6px 0 0">Mande um print disto se uma skill usada não ficar verde.</p></div>` : ''}`
   }
   function wireSkills() {
     for (const b of root.querySelectorAll('[data-use]')) b.onclick = async () => {
@@ -194,6 +209,8 @@
       localStorage.setItem('tm-open', JSON.stringify(openBlocks)); render()
     }
     for (const b of root.querySelectorAll('[data-filter]')) b.onclick = () => { usedOnly = b.dataset.filter === 'used'; render() }
+    const d = root.querySelector('[data-diag]')
+    if (d) d.onclick = () => { showDiag = !showDiag; render() }
   }
 
   // ---------- Agentes ----------
@@ -292,6 +309,69 @@
   // Este chat está gerando resposta agora? (botão de parar visível)
   const isStreamingHere = () => !!document.querySelector('button[aria-label*="Stop" i], button[aria-label*="Parar" i], [data-testid="stop-button"]')
 
+  // ---------- Continuar / Permitir ----------
+  // Procura na página do claude.ai: botão de permissão (ex.: "Allow once"), botão "Continue",
+  // e se o Claude está respondendo. O painel mostra o botão certo e clica por você.
+  const pageButtons = () => [...document.querySelectorAll('button')].filter(b => !host.contains(b) && b.getClientRects().length > 0)
+  const labelOf = b => (b.innerText || b.getAttribute('aria-label') || '').trim()
+  function scanPage() {
+    const btns = pageButtons()
+    const permits = btns.filter(b => /^(allow|permitir|approve|aprovar)( once| uma vez| for this chat| neste chat| para este chat)?$/i.test(labelOf(b)))
+    const once = permits.find(b => /once|uma vez/i.test(labelOf(b))) || permits.find(b => !/always|sempre/i.test(labelOf(b))) || null
+    const cont = btns.find(b => /^(continue|continuar)$/i.test(labelOf(b))) || null
+    return { permit: once, permitLabel: once ? labelOf(once) : '', cont, streaming: isStreamingHere(), inChat: !!TM.conversationIdFromUrl(location.pathname) }
+  }
+  let lastAct = ''
+  function renderAct(force) {
+    const st = scanPage()
+    const key = `${!!st.permit}|${st.permitLabel}|${!!st.cont}|${st.streaming}|${st.inChat}`
+    if (key === lastAct && !force) return
+    lastAct = key
+    const el = $('#act')
+    if (st.permit) el.innerHTML = `<div class="act"><span class="msg">O Claude parou e pediu permissão ("${esc(st.permitLabel)}").</span><div class="btns"><button id="doPermit" class="on">Permitir</button></div></div>`
+    else if (st.cont) el.innerHTML = `<div class="act"><span class="msg">A resposta parou no meio.</span><div class="btns"><button id="doCont" class="on">Continuar</button></div></div>`
+    else if (st.inChat && !st.streaming) el.innerHTML = `<div class="act calm"><div class="btns"><button id="doSay" title="Manda &quot;continue&quot; na conversa">▶ Mandar continuar</button></div></div>`
+    else el.innerHTML = ''
+    const p = $('#doPermit'), c = $('#doCont'), say = $('#doSay')
+    if (p) p.onclick = () => { scanPage().permit?.click(); setTimeout(() => renderAct(true), 800) }
+    if (c) c.onclick = () => { scanPage().cont?.click(); setTimeout(() => renderAct(true), 800) }
+    if (say) say.onclick = () => sendText('continue')
+  }
+  function sendText(text) {
+    if (!TMSkills.insert(text)) { skillNote = 'Não achei a caixa de mensagem.'; render(); return }
+    setTimeout(() => {
+      const send = pageButtons().find(b => /send|enviar/i.test(b.getAttribute('aria-label') || '') && !b.disabled)
+      if (send) send.click()
+      else {
+        const box = document.querySelector('div[contenteditable="true"]') || document.querySelector('textarea')
+        box?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }))
+      }
+      setTimeout(() => renderAct(true), 800)
+    }, 150)
+  }
+
+  // ---------- Janela própria ----------
+  let popWin = null
+  async function popOut() {
+    if (popWin) { popWin.close(); return }
+    let w = null
+    try {
+      if (window.documentPictureInPicture) w = await window.documentPictureInPicture.requestWindow({ width: 360, height: 820 })
+    } catch {}
+    if (!w) w = window.open('', 'token-meter', 'width=380,height=860')
+    if (!w) { skillNote = 'O Chrome bloqueou a janela: libere pop-ups do claude.ai.'; render(); return }
+    if (!w.document.body) { w.document.write('<!doctype html><title>Token Meter</title><body style="margin:0"></body>'); w.document.close() }
+    w.document.title = 'Token Meter'
+    w.document.body.style.margin = '0'
+    w.document.body.appendChild(host)
+    wrap.classList.add('popped'); $('#pop').textContent = '⤓'; $('#pop').title = 'Voltar o painel para a página'
+    popWin = w
+    w.addEventListener('pagehide', () => {
+      popWin = null
+      if (window.__tokenMeter) { document.body.appendChild(host); wrap.classList.remove('popped'); $('#pop').textContent = '⧉'; $('#pop').title = 'Abrir em janela própria (fica visível em outras abas)' }
+    })
+  }
+
   async function getJson(path) {
     const r = await fetch(path, { credentials: 'include', headers: { accept: 'application/json' } })
     if (!r.ok) throw new Error(`${path.split('?')[0].replace(/[0-9a-f-]{36}/g, '…')} respondeu ${r.status}`)
@@ -318,7 +398,7 @@
         const est = TM.estimateConversation(conv)
         if (!est.model) est.model = modelFromPage()
         next.conversation = { tokens: est.tokens, messages: est.messages, model: est.model, window: TM.contextWindow(est.model), badge: est.lastHuman ? TM.advise(TM.classify(est.lastHuman), est.model) : null,
-          lastHuman: est.lastHuman, skillsUsed: Object.fromEntries(TMSkills.usedIn(conv)) }
+          lastHuman: est.lastHuman, skillsUsed: Object.fromEntries(TMSkills.usedIn(conv, TMSkills.webList())), diag: TMSkills.diagnose(conv) }
       }
     } catch (e) { next.error = e.message; orgId = null }
     busy = false
@@ -369,6 +449,7 @@
   const soon = ms => { clearTimeout(timer); timer = setTimeout(refreshUsage, ms) }
 
   const ivs = [
+    setInterval(() => renderAct(false), 2000),
     setInterval(() => { if (location.href !== lastUrl) { lastUrl = location.href; soon(800) } }, 1000),
     setInterval(refreshUsage, 60000),
     setInterval(refreshAgents, 90000),
@@ -380,11 +461,13 @@
 
   for (const b of root.querySelectorAll('nav button')) b.onclick = () => { tab = b.dataset.tab; localStorage.setItem('tm-tab', tab); render(); if (tab === 'cerebro') refreshBrain(); if (tab === 'agentes' && !agents) refreshAgents() }
   $('#r').onclick = refreshAll
+  $('#pop').onclick = popOut
   $('#m').onclick = () => { wrap.classList.toggle('min'); $('#m').textContent = wrap.classList.contains('min') ? '+' : '–'; render() }
   $('#x').onclick = () => window.__tokenMeter.destroy()
 
-  window.__tokenMeter = { destroy() { ivs.forEach(clearInterval); clearTimeout(timer); mo.disconnect(); host.remove(); delete window.__tokenMeter } }
+  window.__tokenMeter = { destroy() { ivs.forEach(clearInterval); clearTimeout(timer); mo.disconnect(); host.remove(); delete window.__tokenMeter; if (popWin) popWin.close() } }
   render()
+  renderAct(true)
   refreshUsage()
   refreshAgents()
   refreshBrain()
