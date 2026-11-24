@@ -11,9 +11,12 @@
   document.body.appendChild(host)
 
   const isDark = () => {
-    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(getComputedStyle(document.body).backgroundColor || '')
-    if (!m) return matchMedia('(prefers-color-scheme: dark)').matches
-    return (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) / 255 < 0.5
+    // Fundo transparente ("rgba(0, 0, 0, 0)") não é preto: passa para o <html> e depois para o sistema.
+    for (const el of [document.body, document.documentElement]) {
+      const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(getComputedStyle(el).backgroundColor || '')
+      if (m && (m[4] === undefined || Number(m[4]) > 0)) return (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) / 255 < 0.5
+    }
+    return matchMedia('(prefers-color-scheme: dark)').matches
   }
 
   root.innerHTML = `<style>

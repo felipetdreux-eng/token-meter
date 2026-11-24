@@ -26,3 +26,18 @@ test('resetText: casos normais', () => {
   assert.strictEqual(resetText(new Date(Date.now() - 1000).toISOString()), '')
   assert.strictEqual(resetText(null), '')
 })
+
+test('isDark: fundo transparente não conta como preto', () => {
+  const env = bg => ({
+    getComputedStyle: el => ({ backgroundColor: bg[el] }),
+    document: { body: 'body', documentElement: 'html' },
+    matchMedia: () => ({ matches: false }),
+  })
+  const isDark = (bg) => helper('isDark', env(bg))()
+  assert.strictEqual(isDark({ body: 'rgb(250, 249, 245)', html: 'rgb(0, 0, 0)' }), false)
+  assert.strictEqual(isDark({ body: 'rgb(38, 38, 36)', html: 'rgb(255, 255, 255)' }), true)
+  // body sem cor própria: usa o <html>; sem cor nenhuma: usa a preferência do sistema (false aqui)
+  assert.strictEqual(isDark({ body: 'rgba(0, 0, 0, 0)', html: 'rgb(250, 249, 245)' }), false)
+  assert.strictEqual(isDark({ body: 'rgba(0, 0, 0, 0)', html: 'rgb(38, 38, 36)' }), true)
+  assert.strictEqual(isDark({ body: 'rgba(0, 0, 0, 0)', html: 'rgba(0, 0, 0, 0)' }), false)
+})
