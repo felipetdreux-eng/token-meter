@@ -1,0 +1,6 @@
+{
+  "name": "felipe-mods",
+  "owner": { "name": "felipetdreux-eng" },
+  "description": "Mods do Claude Code do Felipe",
+  "plugins": [{ "name": "economia", "source": "./economia", "description": "Desvia tarefas mecânicas para subagentes em modelos mais baratos" }]
+}
