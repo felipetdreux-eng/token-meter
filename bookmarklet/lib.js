@@ -95,11 +95,12 @@
 
   const COMPLEX = ['refator', 'arquitet', 'debug', 'bug', 'não funciona', 'nao funciona', 'quebrou', 'por que', 'investig', 'migr', 'implement', 'otimiz', 'performance', 'seguran', 'planej', 'plano', 'integra', 'deploy', 'banco de dados', 'estratégia', 'estrategia', 'analis', 'compar', 'contrato', 'do zero', 'sistema', 'design', 'refactor', 'architecture']
   const SIMPLE = ['o que é', 'o que significa', 'qual é', 'qual o', 'traduz', 'renomei', 'ortografia', 'formata', 'resum', 'rápido', 'rapido', 'só ', 'apenas', 'lista', 'obrigado', 'valeu', 'beleza', 'ok', 'sim', 'continua']
+  const WHOLE = new Set(['ok', 'sim']) // curtas demais: só como palavra inteira ("token" não é "ok", "assim" não é "sim")
 
   function classify(text) {
     const t = String(text || '').toLowerCase()
     const complex = COMPLEX.filter(k => t.includes(k)).length
-    const simple = SIMPLE.filter(k => t.includes(k)).length
+    const simple = SIMPLE.filter(k => (WHOLE.has(k) ? new RegExp(`(?<![\\p{L}\\p{N}])${k}(?![\\p{L}\\p{N}])`, 'u').test(t) : t.includes(k))).length
     if (t.length > 700 || t.includes('```') || complex >= 2 || (complex >= 1 && t.length > 80)) return 'complexa'
     if (complex === 0 && (t.length < 50 || simple >= 1)) return 'simples'
     return 'normal'
