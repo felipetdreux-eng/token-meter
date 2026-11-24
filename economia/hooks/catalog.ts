@@ -139,5 +139,7 @@ export function suggest(text: string, available: readonly string[], max = 3): { 
     const hits = entry.words.filter(w => wordRe(w).test(t))
     if (hits.length) out.push({ name, hits })
   }
-  return out.sort((a, b) => b.hits.length - a.hits.length || a.name.localeCompare(b.name)).slice(0, max)
+  // Empate: a versão em português (-br) primeiro, depois ordem alfabética.
+  const br = (n: string): number => (n.endsWith('-br') ? 0 : 1)
+  return out.sort((a, b) => b.hits.length - a.hits.length || br(a.name) - br(b.name) || a.name.localeCompare(b.name)).slice(0, max)
 }

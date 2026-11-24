@@ -104,3 +104,7 @@ test('sugestões aparecem para a última mensagem, com botão Usar', async ($, o
   expect(filled).toEqual(['/instagram-br:ig-reel-br '])
   await ui.unmount()
 })
+
+test('empate nas sugestões prefere a versão em português', async () => {
+  expect(suggest('humanizar a legenda', ['instagram-agent:ig-human', 'instagram-br:ig-human-br'])[0]?.name).toBe('instagram-br:ig-human-br')
+})

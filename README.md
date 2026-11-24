@@ -1,10 +1,11 @@
 # token-meter
 
-Um favorito (bookmarklet) para o claude.ai que abre um painel flutuante com três abas:
+Um favorito (bookmarklet) para o claude.ai que abre um painel flutuante com quatro abas (Uso, Skills, Agentes, Cérebro):
 
 - **Selo de modelo**: ✓ verde quando o modelo combina com a sua última mensagem; ✗ vermelho com o modelo sugerido quando não combina (classificação por palavras-chave).
 - **Anéis** de contexto da conversa, limite de 5 horas e limite da semana, com o tempo até resetar.
 - **Avisos** quando o contexto ou um limite passa de 60% / 80–85%.
+- **Skills**: suas skills do claude.ai em blocos, com para que serve, verde nas que o Claude usou na conversa, filtro "Em uso", botão "Usar" (escreve o pedido na caixa de mensagem) e sugestões para a sua última mensagem. O catálogo é o mesmo do mod economia (`economia/hooks/catalog.ts`).
 - **Agentes**: suas sessões do Claude Code (trabalhando, esperando você, falharam) e tarefas agendadas (próxima execução, se a última deu certo).
 - **Cérebro**: resumo de uma pasta de notas .md (Obsidian ou parecido) que você escolhe: notas, tarefas abertas, o que mexeu por último, áreas e tags. Nada sai do seu computador.
 
@@ -23,7 +24,7 @@ Os limites vêm de endereços internos do claude.ai, que podem mudar sem aviso. 
 
 ## Código
 
-`bookmarklet/lib.js` (uso e selo), `agents.js`, `brain.js` e `overlay.js` (painel). `bookmarklet/build.sh` gera o favorito.
+`bookmarklet/lib.js` (uso e selo), `skills-web.js`, `agents.js`, `brain.js` e `overlay.js` (painel); `catalog.js` é gerado do catálogo do mod economia. `bookmarklet/build.sh` gera o favorito.
 
 ## Mod "economia" para o Claude Code
 

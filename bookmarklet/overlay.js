@@ -3,7 +3,7 @@
 ;(function () {
   if (window.__tokenMeter) { window.__tokenMeter.destroy(); return }
   if (!/(^|\.)claude\.ai$/.test(location.hostname)) { alert('Abra o claude.ai e clique no favorito de novo.'); return }
-  const { TM, TMAgents, TMBrain } = window
+  const { TM, TMAgents, TMBrain, TMSkills, TMCatalog } = window
 
   const host = document.createElement('div')
   host.id = 'token-meter-host'
@@ -33,7 +33,7 @@
   button.primary { background: var(--accent); border-color: var(--accent); color:#fff; font-weight:600; height:32px; width:100%; }
   nav { display:flex; gap:4px; padding: 0 12px 8px; }
   nav button { flex:1; border-radius: 999px; }
-  nav button.on { background: var(--accent); border-color: var(--accent); color:#fff; font-weight:600; }
+  button.on, nav button.on { background: var(--accent); border-color: var(--accent); color:#fff; font-weight:600; }
   main { padding: 0 12px 12px; display:flex; flex-direction:column; gap:10px; overflow:auto; }
   .muted { color: var(--muted); }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
@@ -66,6 +66,10 @@
   .chips { display:flex; flex-wrap:wrap; gap:4px; }
   .chip { font-size:11px; border:1px solid var(--line); border-radius:999px; padding:1px 8px; color: var(--muted); }
   .chip b { color: var(--text); }
+  .blk { width:100%; text-align:left; height:auto; padding:6px 10px; font-weight:600; }
+  .use { flex:none; }
+  .green { color: var(--ok); } .gray { color: var(--line); }
+  .note { font-size:11px; color: var(--ok); font-weight:600; }
   .tried { font: 10px ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; }
   footer { display:flex; justify-content:space-between; padding: 8px 12px; border-top:1px solid var(--line); font-size:11px; }
   a { color: var(--accent); text-decoration:none; }
@@ -73,7 +77,7 @@
   <div class="wrap">
     <header><span class="brand">TOKEN METER</span><span class="pill" id="pill"></span>
       <button id="r" title="Atualizar">↻</button><button id="m" title="Minimizar">–</button><button id="x" title="Fechar">×</button></header>
-    <nav><button data-tab="uso">Uso</button><button data-tab="agentes">Agentes</button><button data-tab="cerebro">Cérebro</button></nav>
+    <nav><button data-tab="uso">Uso</button><button data-tab="skills">Skills</button><button data-tab="agentes">Agentes</button><button data-tab="cerebro">Cérebro</button></nav>
     <main id="app"><p class="muted">Carregando…</p></main>
     <footer><span id="upd" class="muted"></span><a id="flink" href="/settings/usage">Settings › Usage</a></footer>
   </div>`
@@ -140,6 +144,56 @@
     return badge + alert + rings + stats + err
   }
 
+  // ---------- Skills ----------
+  let usedOnly = false, skillNote = ''
+  let openBlocks = (() => { try { return JSON.parse(localStorage.getItem('tm-open') || '["conteudo"]') } catch { return ['conteudo'] } })()
+  function viewSkills() {
+    const conv = usage?.conversation
+    const usedMap = new Map(Object.entries(conv?.skillsUsed ?? {}))
+    const names = TMSkills.webList()
+    const count = n => TMSkills.usedCount(usedMap, n)
+    const usedN = names.filter(n => count(n) > 0).length
+    const tips = conv?.lastHuman ? TMCatalog.suggest(conv.lastHuman, names) : []
+    const row = (n, why) => {
+      const e = TMCatalog.lookup(n), c = count(n)
+      return `<div class="row"><span class="dot ${c ? 'okrun' : ''}"></span><div class="grow"><span class="ttl">${esc(TMSkills.short(n))}</span>
+        <div class="meta" style="white-space:normal">${esc(e?.what ?? '')}</div>
+        ${why ? `<div class="meta" style="color:var(--accent)">combina com: ${esc(why)}</div>` : ''}
+        ${c ? `<div class="meta green">usada nesta conversa</div>` : ''}</div>
+        <button class="use" data-use="${esc(n)}">Usar</button></div>`
+    }
+    const visible = usedOnly ? names.filter(n => count(n) > 0) : names
+    const blocks = TMCatalog.BLOCKS.map(b => ({ ...b, items: visible.filter(n => (TMCatalog.lookup(n)?.block ?? 'outras') === b.id) })).filter(b => b.items.length)
+    return `
+      <div class="chips"><span class="chip"><b>${names.length}</b> skills</span><span class="chip"><b>${usedN}</b> usadas nesta conversa</span></div>
+      <div style="display:flex;gap:4px"><button data-filter="all" class="${usedOnly ? '' : 'on'}" style="flex:1">Todas</button><button data-filter="used" class="${usedOnly ? 'on' : ''}" style="flex:1">${usedOnly ? '● ' : ''}Em uso (${usedN})</button></div>
+      ${skillNote ? `<div class="note">${esc(skillNote)}</div>` : ''}
+      <div class="card" style="border-color:var(--accent)"><div class="title" style="color:var(--accent)">Sugestões para sua última mensagem</div>
+        ${tips.length ? tips.map(t => row(t.name, t.hits.join(', '))).join('') : `<p class="muted" style="margin:0">${conv?.lastHuman ? 'Nenhuma skill combina com a última mensagem.' : 'Abra uma conversa e mande uma mensagem: aqui aparecem as skills que combinam.'}</p>`}</div>
+      ${usedOnly && !usedN ? '<p class="muted">Nenhuma skill usada nesta conversa ainda.</p>' : ''}
+      ${blocks.map(b => {
+        const isOpen = usedOnly || openBlocks.includes(b.id)
+        const u = b.items.filter(n => count(n) > 0).length
+        return `<div><button class="blk" data-block="${b.id}">${isOpen ? '▾' : '▸'} ${esc(b.title)} (${b.items.length})${u ? ` · <span class="green">${u} em uso</span>` : ''}</button>
+          ${isOpen ? `<div class="card" style="margin-top:6px">${b.items.map(n => row(n)).join('')}</div>` : ''}</div>`
+      }).join('')}
+      <p class="meta">Verde = o Claude usou nesta conversa. "Usar" escreve o pedido na caixa de mensagem; você completa e envia.</p>`
+  }
+  function wireSkills() {
+    for (const b of root.querySelectorAll('[data-use]')) b.onclick = async () => {
+      const text = TMSkills.useText(b.dataset.use)
+      if (TMSkills.insert(text)) skillNote = 'Escrevi na caixa de mensagem: complete o pedido e envie.'
+      else { try { await navigator.clipboard.writeText(text) } catch {} skillNote = 'Não achei a caixa de mensagem: copiei o texto, cole lá.' }
+      render(); setTimeout(() => { skillNote = ''; if (tab === 'skills') render() }, 6000)
+    }
+    for (const b of root.querySelectorAll('[data-block]')) b.onclick = () => {
+      const id = b.dataset.block
+      openBlocks = openBlocks.includes(id) ? openBlocks.filter(x => x !== id) : [...openBlocks, id]
+      localStorage.setItem('tm-open', JSON.stringify(openBlocks)); render()
+    }
+    for (const b of root.querySelectorAll('[data-filter]')) b.onclick = () => { usedOnly = b.dataset.filter === 'used'; render() }
+  }
+
   // ---------- Agentes ----------
   function viewAgentes() {
     if (!agents) return '<p class="muted">Procurando seus agentes…</p>'
@@ -197,7 +251,8 @@
   function render() {
     wrap.classList.toggle('dark', isDark())
     for (const b of root.querySelectorAll('nav button')) b.classList.toggle('on', b.dataset.tab === tab)
-    $('#app').innerHTML = tab === 'uso' ? viewUso() : tab === 'agentes' ? viewAgentes() : viewCerebro()
+    $('#app').innerHTML = tab === 'uso' ? viewUso() : tab === 'skills' ? viewSkills() : tab === 'agentes' ? viewAgentes() : viewCerebro()
+    if (tab === 'skills') wireSkills()
     $('#flink').textContent = tab === 'agentes' ? 'claude.ai/code' : 'Settings › Usage'
     $('#flink').setAttribute('href', tab === 'agentes' ? '/code' : '/settings/usage')
     const pick = $('#pick'), grant = $('#grant')
@@ -209,7 +264,7 @@
     upd()
   }
   function upd() {
-    const t = tab === 'uso' ? usage?.updatedAt : tab === 'agentes' ? agents?.updatedAt : brain?.scannedAt
+    const t = tab === 'uso' || tab === 'skills' ? usage?.updatedAt : tab === 'agentes' ? agents?.updatedAt : brain?.scannedAt
     $('#upd').textContent = t ? `atualizado ${ago(t)}` : ''
   }
 
@@ -237,7 +292,8 @@
       if (id) {
         const conv = await getJson(`/api/organizations/${orgId}/chat_conversations/${id}?tree=False&rendering_mode=messages&render_all_tools=true`)
         const est = TM.estimateConversation(conv)
-        next.conversation = { tokens: est.tokens, messages: est.messages, model: est.model, window: TM.contextWindow(est.model), badge: est.lastHuman ? TM.advise(TM.classify(est.lastHuman), est.model) : null }
+        next.conversation = { tokens: est.tokens, messages: est.messages, model: est.model, window: TM.contextWindow(est.model), badge: est.lastHuman ? TM.advise(TM.classify(est.lastHuman), est.model) : null,
+          lastHuman: est.lastHuman, skillsUsed: Object.fromEntries(TMSkills.usedIn(conv)) }
       }
     } catch (e) { next.error = e.message; orgId = null }
     busy = false
