@@ -88,7 +88,7 @@
   }
 
   function prettyModel(model) {
-    const m = /(haiku|sonnet|opus|fable|mythos)-(\d+)(?:-(\d+))?/i.exec(model || '')
+    const m = /(haiku|sonnet|opus|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(model || '')
     if (!m) return model || 'modelo padrão'
     return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? '.' + m[3] : ''}`
   }
