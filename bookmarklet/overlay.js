@@ -321,21 +321,59 @@
     const cont = btns.find(b => /^(continue|continuar)$/i.test(labelOf(b))) || null
     return { permit: once, permitLabel: once ? labelOf(once) : '', cont, streaming: isStreamingHere(), inChat: !!TM.conversationIdFromUrl(location.pathname) }
   }
+  // Clica em Permitir e, se a resposta ficar parada, em Continuar.
+  function permitAndContinue() {
+    const st = scanPage()
+    if (st.permit) st.permit.click()
+    else if (st.cont) { st.cont.click(); return }
+    setTimeout(() => { const again = scanPage(); if (again.cont) again.cont.click(); renderAct(true) }, 1500)
+  }
+
+  // ---------- Tarefas paradas em outras abas ----------
+  // Cada aba do claude.ai com o painel aberto conta às outras quando a tarefa dela para.
+  const me = Math.random().toString(36).slice(2)
+  const chan = 'BroadcastChannel' in window ? new BroadcastChannel('token-meter') : null
+  const others = new Map()
+  const chatName = () => (document.title || '').replace(/\s*[-|·]\s*Claude\s*$/i, '').trim() || 'Chat sem título'
+  if (chan) chan.onmessage = ev => {
+    const m = ev.data || {}
+    if (m.type === 'state' && m.id !== me) { others.set(m.id, { ...m, at: Date.now() }); renderAct(false) }
+    if (m.type === 'act' && m.to === me) permitAndContinue()
+  }
+  let lastSent = ''
+  function broadcast(st) {
+    if (!chan) return
+    const msg = { type: 'state', id: me, name: chatName(), permit: !!st.permit, cont: !!st.cont, label: st.permitLabel }
+    const k = JSON.stringify(msg)
+    if (k !== lastSent || Date.now() % 6000 < 2000) { chan.postMessage(msg); lastSent = k }
+  }
+  const stuckOthers = () => [...others.values()].filter(o => Date.now() - o.at < 10000 && (o.permit || o.cont))
+
   let lastAct = ''
   function renderAct(force) {
     const st = scanPage()
-    const key = `${!!st.permit}|${st.permitLabel}|${!!st.cont}|${st.streaming}|${st.inChat}`
+    broadcast(st)
+    const bg = stuckOthers()
+    const key = `${!!st.permit}|${st.permitLabel}|${!!st.cont}|${st.streaming}|${st.inChat}|${document.hidden}|${bg.map(o => o.id + o.permit + o.cont + o.name).join(',')}`
     if (key === lastAct && !force) return
     lastAct = key
     const el = $('#act')
-    if (st.permit) el.innerHTML = `<div class="act"><span class="msg">O Claude parou e pediu permissão ("${esc(st.permitLabel)}").</span><div class="btns"><button id="doPermit" class="on">Permitir</button></div></div>`
-    else if (st.cont) el.innerHTML = `<div class="act"><span class="msg">A resposta parou no meio.</span><div class="btns"><button id="doCont" class="on">Continuar</button></div></div>`
-    else if (st.inChat && !st.streaming) el.innerHTML = `<div class="act calm"><div class="btns"><button id="doSay" title="Manda &quot;continue&quot; na conversa">▶ Mandar continuar</button></div></div>`
-    else el.innerHTML = ''
+    let html = bg.map(o => `<div class="act"><span class="msg">Tarefa em segundo plano parou: "${esc(o.name)}" ${o.permit ? '(pediu permissão)' : '(parou no meio)'}.</span><div class="btns"><button data-other="${esc(o.id)}" class="on">${o.permit ? 'Permitir e continuar' : 'Continuar'}</button></div></div>`).join('')
+    const away = document.hidden ? 'A tarefa desta conversa parou em segundo plano' : 'O Claude parou nesta conversa'
+    if (st.permit) html += `<div class="act"><span class="msg">${away} e pediu permissão ("${esc(st.permitLabel)}").</span><div class="btns"><button id="doPermit" class="on">Permitir e continuar</button></div></div>`
+    else if (st.cont) html += `<div class="act"><span class="msg">${document.hidden ? 'A tarefa desta conversa parou no meio, em segundo plano.' : 'A resposta parou no meio.'}</span><div class="btns"><button id="doCont" class="on">Continuar</button></div></div>`
+    else if (st.inChat && !st.streaming) html += `<div class="act calm"><div class="btns"><button id="doSay" title="Manda &quot;continue&quot; na conversa">▶ Mandar continuar</button></div></div>`
+    el.innerHTML = html
+    if (popWin) popWin.document.title = bg.length || st.permit || st.cont ? '⚠ Tarefa parada · Token Meter' : 'Token Meter'
     const p = $('#doPermit'), c = $('#doCont'), say = $('#doSay')
-    if (p) p.onclick = () => { scanPage().permit?.click(); setTimeout(() => renderAct(true), 800) }
+    if (p) p.onclick = () => permitAndContinue()
     if (c) c.onclick = () => { scanPage().cont?.click(); setTimeout(() => renderAct(true), 800) }
     if (say) say.onclick = () => sendText('continue')
+    for (const b of root.querySelectorAll('[data-other]')) b.onclick = () => {
+      chan?.postMessage({ type: 'act', to: b.dataset.other })
+      others.delete(b.dataset.other)
+      b.textContent = 'Enviado…'; b.disabled = true
+    }
   }
   function sendText(text) {
     if (!TMSkills.insert(text)) { skillNote = 'Não achei a caixa de mensagem.'; render(); return }
@@ -465,7 +503,7 @@
   $('#m').onclick = () => { wrap.classList.toggle('min'); $('#m').textContent = wrap.classList.contains('min') ? '+' : '–'; render() }
   $('#x').onclick = () => window.__tokenMeter.destroy()
 
-  window.__tokenMeter = { destroy() { ivs.forEach(clearInterval); clearTimeout(timer); mo.disconnect(); host.remove(); delete window.__tokenMeter; if (popWin) popWin.close() } }
+  window.__tokenMeter = { destroy() { ivs.forEach(clearInterval); clearTimeout(timer); mo.disconnect(); host.remove(); delete window.__tokenMeter; if (popWin) popWin.close(); chan?.close() } }
   render()
   renderAct(true)
   refreshUsage()
