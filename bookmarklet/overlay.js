@@ -312,15 +312,22 @@
   // ---------- Continuar / Permitir ----------
   // Procura na página do claude.ai: botão de permissão (ex.: "Allow once"), botão "Continue",
   // e se o Claude está respondendo. O painel mostra o botão certo e clica por você.
-  const pageButtons = () => [...document.querySelectorAll('button')].filter(b => !host.contains(b) && b.getClientRects().length > 0)
-  const labelOf = b => (b.innerText || b.getAttribute('aria-label') || '').trim()
+  // Botões da página: <button> e elementos com role="button", visíveis, fora do painel.
+  const pageButtons = () => [...document.querySelectorAll('button, [role="button"]')].filter(b => !host.contains(b) && b.getClientRects().length > 0)
+  // Texto do botão sem atalhos e símbolos ("Allow once ⏎" vira "allow once").
+  const labelOf = b => (b.innerText || b.getAttribute('aria-label') || '').replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim()
+  const PERMIT = /^(allow|permitir|approve|aprovar|autorizar)\b/i
+  const NEVER = /always|sempre|deny|negar|recusar|don.?t|não|nao|reject|cancel/i
   function scanPage() {
     const btns = pageButtons()
-    const permits = btns.filter(b => /^(allow|permitir|approve|aprovar)( once| uma vez| for this chat| neste chat| para este chat)?$/i.test(labelOf(b)))
-    const once = permits.find(b => /once|uma vez/i.test(labelOf(b))) || permits.find(b => !/always|sempre/i.test(labelOf(b))) || null
-    const cont = btns.find(b => /^(continue|continuar)$/i.test(labelOf(b))) || null
-    return { permit: once, permitLabel: once ? labelOf(once) : '', cont, streaming: isStreamingHere(), inChat: !!TM.conversationIdFromUrl(location.pathname) }
+    const permits = btns.filter(b => PERMIT.test(labelOf(b)) && !NEVER.test(labelOf(b)) && labelOf(b).length <= 40)
+    const once = permits.find(b => /once|uma vez|this time|desta vez/i.test(labelOf(b))) || permits[0] || null
+    const cont = btns.find(b => /^(continue|continuar)\b/i.test(labelOf(b)) && labelOf(b).length <= 25) || null
+    return { permit: once, permitLabel: once ? labelOf(once) : '', cont, streaming: isStreamingHere(), inChat: !!TM.conversationIdFromUrl(location.pathname) || /\/code\//.test(location.pathname) }
   }
+  // Para o diagnóstico: os textos dos botões que a página mostra agora.
+  const buttonTexts = () => [...new Set(pageButtons().map(labelOf).filter(Boolean))].slice(0, 40)
+
   // Clica em Permitir e, se a resposta ficar parada, em Continuar.
   function permitAndContinue() {
     const st = scanPage()
@@ -349,7 +356,7 @@
   }
   const stuckOthers = () => [...others.values()].filter(o => Date.now() - o.at < 10000 && (o.permit || o.cont))
 
-  let lastAct = ''
+  let lastAct = '', showBtns = false
   function renderAct(force) {
     const st = scanPage()
     broadcast(st)
@@ -362,13 +369,16 @@
     const away = document.hidden ? 'A tarefa desta conversa parou em segundo plano' : 'O Claude parou nesta conversa'
     if (st.permit) html += `<div class="act"><span class="msg">${away} e pediu permissão ("${esc(st.permitLabel)}").</span><div class="btns"><button id="doPermit" class="on">Permitir e continuar</button></div></div>`
     else if (st.cont) html += `<div class="act"><span class="msg">${document.hidden ? 'A tarefa desta conversa parou no meio, em segundo plano.' : 'A resposta parou no meio.'}</span><div class="btns"><button id="doCont" class="on">Continuar</button></div></div>`
-    else if (st.inChat && !st.streaming) html += `<div class="act calm"><div class="btns"><button id="doSay" title="Manda &quot;continue&quot; na conversa">▶ Mandar continuar</button></div></div>`
+    else if (st.inChat && !st.streaming) html += `<div class="act calm"><div class="btns"><button id="doSay" title="Manda &quot;continue&quot; na conversa">▶ Mandar continuar</button><button id="doBtns" title="Mostra os botões que o painel enxerga" style="flex:none">?</button></div></div>`
+    if (showBtns) html += `<div class="act calm"><span class="msg" style="color:var(--muted)">Botões que o painel vê nesta página:</span><div class="tried">${esc(buttonTexts().join(' · ') || 'nenhum')}</div></div>`
     el.innerHTML = html
     if (popWin) popWin.document.title = bg.length || st.permit || st.cont ? '⚠ Tarefa parada · Token Meter' : 'Token Meter'
     const p = $('#doPermit'), c = $('#doCont'), say = $('#doSay')
     if (p) p.onclick = () => permitAndContinue()
     if (c) c.onclick = () => { scanPage().cont?.click(); setTimeout(() => renderAct(true), 800) }
     if (say) say.onclick = () => sendText('continue')
+    const bt = $('#doBtns')
+    if (bt) bt.onclick = () => { showBtns = !showBtns; renderAct(true) }
     for (const b of root.querySelectorAll('[data-other]')) b.onclick = () => {
       chan?.postMessage({ type: 'act', to: b.dataset.other })
       others.delete(b.dataset.other)
